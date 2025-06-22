@@ -41,17 +41,16 @@ def show():
             st.warning("没有找到符合条件的文献")
         else:  
             for paper in results:
-                detail_url = f"/detail_page?paper_id={paper.paper_id}"
-                st.markdown(
-                f"[**{paper.title}**]({detail_url})",
-                )
 
                 st.markdown(f"**{paper.title}**  ")
                 st.markdown(f"作者：{', '.join(paper.authors)}")
                 st.markdown(f"年份：{paper.year} | 被引用：{paper.citation_count}")
                 abstract_display = paper.abstract[:200] + '...' if paper.abstract and len(paper.abstract) > 200 else (paper.abstract or "暂无摘要")
                 st.markdown(f"**摘要**: {abstract_display}")
+                detail_url = f"/ui/details_page?paper_id={paper.paper_id}"
+                if st.button("前往详情页"):
+                    st.switch_page("pages/detail_page.py")
                 st.markdown("---")
     
-
-   
+if __name__ == "__main__":
+    show()
