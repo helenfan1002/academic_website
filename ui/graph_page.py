@@ -5,4 +5,4 @@ def show():
     st.info("TODO：引用网络图将在这里展示")
     
 if __name__ == '__main__':
-    main()
+    show()

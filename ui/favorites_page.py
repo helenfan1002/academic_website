@@ -5,4 +5,4 @@ def show():
     st.info("TODO：展示收藏的文献、支持导出")
 
 if __name__ == '__main__':
-    main()
+    show()

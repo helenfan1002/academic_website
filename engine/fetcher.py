@@ -29,16 +29,16 @@ def fetch_papers(keyword:str,
         params["query"] = f'{keyword} author:"{author_name}"'
 
     res = requests.get(
-    "https://s2api.ominiai.cn/generalProxy/graph/v1/paper/search",
-    headers=headers,
-    params=params
+        "https://s2api.ominiai.cn/generalProxy/graph/v1/paper/search",
+        headers=headers,
+        params=params
     )   
 
     data=res.json()
     papers = []
     for item in data.get("data", []):
         papers.append(Paper(
-            paper_id=item.get("id", "unknown"),
+            paper_id=item.get("paperId", "unknown"),
             title=item.get("title", "无标题"),
             authors=[author.get("name", "") for author in item.get("authors", [])],
             year=item.get("year", "未知"),
