@@ -19,9 +19,9 @@ def fetch_papers(keyword:str,
     }
 
     res = requests.get(
-    "https://s2api.ominiai.cn/generalProxy/graph/v1/paper/search",
-    headers=headers,
-    params=params
+        "https://s2api.ominiai.cn/generalProxy/graph/v1/paper/search",
+        headers=headers,
+        params=params
     )   
 
     data=res.json()

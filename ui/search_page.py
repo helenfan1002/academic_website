@@ -42,8 +42,8 @@ def search_bar(value: str = ""):
                     "search_results": results,
                     "search_keyword": keyword,
                     "page_state": "search_results",
-                    "filter_year_min": min(p.year for p in results) if results else 1900,
-                    "filter_year_max": max(p.year for p in results) if results else datetime.now().year,
+                    "filter_year_min": min(p.year if p.year else 1900 for p in results) if results else 1900,
+                    "filter_year_max": max(p.year if p.year else datetime.now().year for p in results) if results else datetime.now().year,
                     "selected_authors": []
                 })
                 st.rerun()
@@ -94,7 +94,7 @@ def search_results():
     
     filtered_results = [
         paper for paper in all_results
-        if (year_min <= paper.year <= year_max) and
+        if paper.year and (year_min <= paper.year <= year_max) and
            (not selected_authors or any(author in selected_authors for author in paper.authors))
     ]
     
@@ -116,8 +116,8 @@ def display_paper_card(paper: Paper, index: int):
     st.markdown(f"### {paper.title}")
     st.caption(f"作者：{', '.join(paper.authors)} | 年份：{paper.year} | 引用：{paper.citation_count}")
     
-    with st.expander("摘要"):
-        st.write(paper.abstract or "暂无摘要")
+    with st.expander("摘要", expanded=True):
+        st.write(paper.abstract[:100] + "..." if paper.abstract else "暂无摘要")
     
     if st.button("查看详情", key=f"detail_{index}_{paper.paper_id or 'unknown'}"):
         st.session_state.update({
@@ -168,7 +168,7 @@ def paper_details():
     st.markdown(f"**作者**: {', '.join(paper.authors)}")
     st.markdown(f"**发表年份**: {paper.year} | **被引用次数**: {paper.citation_count}")
     
-    with st.expander("完整摘要"):
+    with st.expander("完整摘要", expanded=True):
         st.write(paper.abstract or "暂无摘要")
     
     if st.button("返回搜索结果"):
