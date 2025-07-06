@@ -1,5 +1,6 @@
 import streamlit as st
-from engine.fetcher import fetch_papers
+from engine.fetcher import fetch_papers, get_simple_references, get_simple_citations
+from engine.database import Database
 from models.paper import Paper
 from datetime import datetime
 from typing import List
@@ -42,8 +43,8 @@ def search_bar(value: str = ""):
                     "search_results": results,
                     "search_keyword": keyword,
                     "page_state": "search_results",
-                    "filter_year_min": min(p.year if p.year else 1900 for p in results) if results else 1900,
-                    "filter_year_max": max(p.year if p.year else datetime.now().year for p in results) if results else datetime.now().year,
+                    "filter_year_min": min(p.year for p in results) if results else 1900,
+                    "filter_year_max": max(p.year for p in results) if results else datetime.now().year,
                     "selected_authors": []
                 })
                 st.rerun()
@@ -94,7 +95,7 @@ def search_results():
     
     filtered_results = [
         paper for paper in all_results
-        if paper.year and (year_min <= paper.year <= year_max) and
+        if (year_min <= paper.year <= year_max) and
            (not selected_authors or any(author in selected_authors for author in paper.authors))
     ]
     
@@ -112,19 +113,42 @@ def search_results():
     display_pagination_controls(len(filtered_results))
 
 def display_paper_card(paper: Paper, index: int):
-    """显示单篇论文卡片"""
-    st.markdown(f"### {paper.title}")
-    st.caption(f"作者：{', '.join(paper.authors)} | 年份：{paper.year} | 引用：{paper.citation_count}")
+    """显示单篇论文卡片（添加收藏功能）"""
+    from engine.database import Database
     
-    with st.expander("摘要", expanded=True):
-        st.write(paper.abstract[:100] + "..." if paper.abstract else "暂无摘要")
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown(f"### {paper.title}")
+        st.caption(f"作者：{', '.join(paper.authors)} | 年份：{paper.year} | 引用：{paper.citation_count}")
+        
+        with st.expander("摘要"):
+            st.write(paper.abstract or "暂无摘要")
     
-    if st.button("查看详情", key=f"detail_{index}_{paper.paper_id or 'unknown'}"):
-        st.session_state.update({
-            "paper_details": paper,
-            "page_state": "paper_details"
-        })
-        st.rerun()
+    with col2:
+        with Database() as db:
+            is_favorited = db.paper_exists(paper.paper_id)  
+        
+            if st.button("⭐ 已收藏" if is_favorited else "☆ 收藏", 
+                        key=f"fav_{index}"):
+                try:
+                    if is_favorited:
+                        db.remove_paper(paper.paper_id)
+                        st.toast("已取消收藏")
+                    else:
+                        db.add_paper(paper)
+                        st.toast("已收藏论文")
+                    st.session_state.force_rerun = not getattr(st.session_state, 'force_rerun', False)
+                except Exception as e:
+                    st.error(f"操作失败: {str(e)}")
+        
+            if st.button("详情", key=f"detail_{index}"):
+                st.session_state.update({
+                    "paper_details": paper,
+                    "page_state": "paper_details"
+                })
+                st.experimental_rerun()
+                st.experimental_rerun()
+
 
 def get_paginated_results(data: List[Paper]) -> List[Paper]:
     """获取当前页的结果"""
@@ -167,10 +191,37 @@ def paper_details():
     st.markdown(f"# {paper.title}")
     st.markdown(f"**作者**: {', '.join(paper.authors)}")
     st.markdown(f"**发表年份**: {paper.year} | **被引用次数**: {paper.citation_count}")
-    
-    with st.expander("完整摘要", expanded=True):
+
+    if getattr(paper, 'url', None):
+        st.markdown(f"[📄 查看PDF全文]({paper.url})")
+    else:
+        st.info("本文献暂无可用PDF全文")
+
+    tab1, tab2, tab3 = st.tabs(["摘要", "参考文献", "引用文献"])
+
+    with tab1:
+        st.markdown("### 摘要")
         st.write(paper.abstract or "暂无摘要")
-    
+
+    with tab2:
+        st.markdown("### 参考文献")
+        references = get_simple_references(paper.paper_id)
+            if references:
+                for ref in references[:10]:
+                    st.write(f"- {ref.get('title', '无标题')}")
+            else:
+                st.info("暂无参考文献数据")
+
+    with tab3:
+        st.markdown(f"### 引用文献 (共 {paper.citation_count} 次)")
+        if paper.citation_count > 0:
+            citations = get_simple_citations(paper.paper_id)
+            if citations:
+                for cite in citations[:10]:
+                    st.write(f"- {cite.get('title', '无标题')}")
+                else:
+                    st.info("暂无引用文献数据")
+
     if st.button("返回搜索结果"):
         st.session_state["page_state"] = "search_results"
         st.rerun()
