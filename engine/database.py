@@ -35,6 +35,7 @@ class Database:
                 year INTEGER,
                 abstract TEXT,
                 citation_count INTEGER,
+                reference_count INTEGER,
                 url TEXT,
                 added_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -61,7 +62,8 @@ class Database:
                         year=row[3],
                         abstract=row[4],
                         citation_count=row[5],
-                        url=row[6]
+                        reference_count=row[6],
+                        url=row[7]
                     ))
                 except json.JSONDecodeError:
                     # 如果作者数据格式错误，使用空列表
@@ -72,7 +74,8 @@ class Database:
                         year=row[3],
                         abstract=row[4],
                         citation_count=row[5],
-                        url=row[6]
+                        reference_count=row[6],
+                        url=row[7]
                     ))
             return papers
         except sqlite3.Error as e:
@@ -99,8 +102,8 @@ class Database:
             cursor = self.conn.cursor()
             cursor.execute("""
             INSERT OR REPLACE INTO papers 
-            (id, title, authors, year, abstract, citation_count, url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id, title, authors, year, abstract, citation_count, reference_count, url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 paper.paper_id,
                 paper.title,
@@ -108,6 +111,7 @@ class Database:
                 paper.year,
                 paper.abstract,
                 paper.citation_count,
+                paper.reference_count,
                 paper.url
             ))
             self.conn.commit()

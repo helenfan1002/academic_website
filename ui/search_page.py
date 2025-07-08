@@ -39,12 +39,13 @@ def search_bar(value: str = ""):
             if not results:
                 st.warning("没有找到符合条件的文献")
             else:
+                years = [p.year for p in results if p.year is not None]
                 st.session_state.update({
                     "search_results": results,
                     "search_keyword": keyword,
                     "page_state": "search_results",
-                    "filter_year_min": min(p.year for p in results) if results else 1900,
-                    "filter_year_max": max(p.year for p in results) if results else datetime.now().year,
+                    "filter_year_min": min(years) if years else 1900,
+                    "filter_year_max": max(years) if years else datetime.now().year,
                     "selected_authors": []
                 })
                 st.rerun()
@@ -121,8 +122,6 @@ def display_paper_card(paper: Paper, index: int):
         st.markdown(f"### {paper.title}")
         st.caption(f"作者：{', '.join(paper.authors)} | 年份：{paper.year} | 引用：{paper.citation_count}")
         
-        with st.expander("摘要"):
-            st.write(paper.abstract or "暂无摘要")
     
     with col2:
         with Database() as db:
@@ -138,6 +137,7 @@ def display_paper_card(paper: Paper, index: int):
                         db.add_paper(paper)
                         st.toast("已收藏论文")
                     st.session_state.force_rerun = not getattr(st.session_state, 'force_rerun', False)
+                    st.rerun()
                 except Exception as e:
                     st.error(f"操作失败: {str(e)}")
         
@@ -146,8 +146,11 @@ def display_paper_card(paper: Paper, index: int):
                     "paper_details": paper,
                     "page_state": "paper_details"
                 })
-                st.experimental_rerun()
-                st.experimental_rerun()
+                st.rerun()
+    with st.expander("摘要", expanded=True):
+        abstract = paper.abstract or "暂无摘要"
+        abstract = abstract[:min(200, len(abstract))] + ("..." if len(abstract) > 200 else "")
+        st.write(abstract)
 
 
 def get_paginated_results(data: List[Paper]) -> List[Paper]:
@@ -204,23 +207,23 @@ def paper_details():
         st.write(paper.abstract or "暂无摘要")
 
     with tab2:
-        st.markdown("### 参考文献")
         references = get_simple_references(paper.paper_id)
-            if references:
-                for ref in references[:10]:
-                    st.write(f"- {ref.get('title', '无标题')}")
-            else:
-                st.info("暂无参考文献数据")
+        st.markdown(f"### 参考文献（{len(references)}）")
+        if references:
+            for ref in references[:min(50, len(references))]:
+                st.write(f"- {ref.title} ({', '.join(ref.authors)})")
+        else:
+            st.info("暂无参考文献数据")
 
     with tab3:
-        st.markdown(f"### 引用文献 (共 {paper.citation_count} 次)")
+        st.markdown(f"### 被引用（{paper.citation_count}）")
         if paper.citation_count > 0:
             citations = get_simple_citations(paper.paper_id)
             if citations:
-                for cite in citations[:10]:
-                    st.write(f"- {cite.get('title', '无标题')}")
-                else:
-                    st.info("暂无引用文献数据")
+                for cite in citations[:min(50, len(citations))]:
+                    st.write(f"- {cite.get('title', '无标题')} ({', '.join(author.get('name', '') for author in cite.get('authors', {}))})")
+            else:
+                st.info("暂无引用文献数据")
 
     if st.button("返回搜索结果"):
         st.session_state["page_state"] = "search_results"

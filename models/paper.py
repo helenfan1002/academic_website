@@ -8,4 +8,6 @@ class Paper:
     year: int
     abstract: str
     citation_count: int
+    reference_count: int
+    url: str = ""
 
