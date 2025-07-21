@@ -196,6 +196,8 @@ def paper_details():
     st.markdown(f"**发表年份**: {paper.year} | **被引用次数**: {paper.citation_count}")
 
     if getattr(paper, 'url', None):
+        pdf_display = f'<embed src="https:aclanthology.org/2020.acl-main.447.pdf" width="800" height="1000" type="application/pdf">'
+        st.markdown(pdf_display, unsafe_allow_html=True)
         st.markdown(f"[📄 查看PDF全文]({paper.url})")
     else:
         st.info("本文献暂无可用PDF全文")
