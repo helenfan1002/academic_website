@@ -65,18 +65,19 @@ def search_results():
     col1, col2 = st.columns(2)
 
     with col1:
-        year_min = st.number_input(
-            "起始年份", 
+        years = [p.year for p in all_results if p.year is not None]
+        if years: 
+            year_min = min(years)
+            year_max = max(years)
+        else:
+            year_min = 1900
+            year_max = datetime.now().year
+
+        year_range = st.slider
+            "选择年份范围",
             min_value=1900,
             max_value=datetime.now().year,
-            value=st.session_state.get("filter_year_min", 1900)
-        )
-        year_max = st.number_input(
-            "结束年份",
-            min_value=1900,
-            max_value=datetime.now().year,
-            value=st.session_state.get("filter_year_max", datetime.now().year)
-        )
+            value=(year_min, year_max)
 
     with col2:
         all_authors = sorted(list({
@@ -98,7 +99,8 @@ def search_results():
 
     filtered_results = [
         paper for paper in all_results
-        if paper.year and (year_min <= paper.year <= year_max) and
+        if (paper.year is None or
+            (year_range[0] <= paper.year <= year_range[1])) and
            (not selected_authors or any(author in selected_authors for author in paper.authors))
     ]
 
