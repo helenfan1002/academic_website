@@ -4,6 +4,7 @@ from engine.database import Database
 from models.paper import Paper
 from datetime import datetime
 from typing import List
+from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle, Event
 
 def show():
     if "page_state" not in st.session_state:
@@ -73,11 +74,12 @@ def search_results():
             year_min = 1900
             year_max = datetime.now().year
 
-        year_range = st.slider
+        year_range = st.slider(
             "选择年份范围",
             min_value=1900,
             max_value=datetime.now().year,
             value=(year_min, year_max)
+        )
 
     with col2:
         all_authors = sorted(list({
@@ -200,7 +202,7 @@ def paper_details():
         st.session_state["page_state"] = "pdf_preview"
         st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["摘要", "参考文献", "引用文献"])
+    tab1, tab2, tab3, tab4 = st.tabs(["摘要", "参考文献", "引用文献","引用图谱"])
 
     with tab1:
         st.markdown("### 摘要")
@@ -211,7 +213,9 @@ def paper_details():
         st.markdown(f"### 参考文献（{len(references)})")
         if references:
             for ref in references[:min(50, len(references))]:
-                st.write(f"- {ref.title} ({', '.join(ref.authors)})")
+                title = ref.title if hasattr(ref, 'title') and ref.title else '无标题'
+                authors = ', '.join(ref.authors) if hasattr(ref, 'authors') and ref.authors else ''
+                st.write(f"- {title} ({authors})")
         else:
             st.info("暂无参考文献数据")
 
@@ -224,6 +228,130 @@ def paper_details():
                     st.write(f"- {cite.get('title', '无标题')} ({', '.join(author.get('name', '') for author in cite.get('authors', {}))})")
             else:
                 st.info("暂无引用文献数据")
+    
+    with tab4:
+        st.markdown("## 引用关系图谱")
+    
+        references = get_simple_references(paper.paper_id)
+        citations = get_simple_citations(paper.paper_id)
+
+        elements = {
+            "nodes": [{
+                "data": {
+                    "id": str(paper.paper_id),
+                    "title": paper.title,
+                    "authors": ", ".join(paper.authors),
+                    "paper_id": paper.paper_id,
+                    "label": "current"
+                }
+            }],
+            "edges": []
+        }
+
+        def get_paper_id(item):
+            if hasattr(item, 'paper_id'):
+                return str(item.paper_id)
+            elif isinstance(item, dict):
+                return str(item.get("paper_id", f"gen_{id(item)}"))
+            return f"gen_{id(item)}"
+
+        for ref in references[:10]:
+            ref_id = get_paper_id(ref)
+            elements["nodes"].append({
+                "data": {
+                    "id": ref_id,
+                    "title": get_title(ref),
+                    "authors": get_authors(ref),
+                    "paper_id": getattr(ref_data, 'paper_id', ref_data.get("paper_id")), 
+                    "label": "reference"
+                }
+            })
+            elements["edges"].append({
+                "data": {
+                    "id": f"edge_{paper.paper_id}_to_{ref_id}",
+                    "source": str(paper.paper_id),
+                    "target": ref_id,
+                    "relation": "cites"
+                }
+            })
+
+        for cite in citations[:10]:
+            cite_id = get_paper_id(cite)
+            elements["nodes"].append({
+                "data": {
+                    "id": cite_id,
+                    "title": get_title(cite),
+                    "authors": get_authors(cite),
+                    "label": "citation"
+                }
+            })
+            elements["edges"].append({
+                "data": {
+                    "id": f"edge_{cite_id}_to_{paper.paper_id}",
+                    "source": cite_id,
+                    "target": str(paper.paper_id),
+                    "relation": "cited_by"
+                }
+            })
+
+        node_styles = [
+            NodeStyle(
+                label='current', 
+                color='#FF6B6B',
+                caption='title',
+                icon='description'
+            ),
+            NodeStyle(
+                label="reference",
+                color="#4ECDC4", 
+                caption="title",
+                icon="description"
+            ),
+            NodeStyle(
+                label="citation",
+                color="#FFD166",
+                caption="title",
+                icon="description"
+            )
+        ]
+
+        edge_styles = [
+            EdgeStyle("CITES", caption='label', directed=True),
+            EdgeStyle("CITED_BY", caption='label', directed=True)
+        ]
+
+        events = [
+            Event(
+                name="node_dblclick", 
+                event_type="dblclick", 
+                selector="node"
+            )
+        ]
+
+        def handle_dblclick():
+            if "link_analysis" in st.session_state:
+                event_data = st.session_state["link_analysis"]
+                if event_data.get("name") == "node_dblclick":
+                    node_id = event_data["data"]["node_id"]
+                    clicked_node = next(
+                        n for n in elements["nodes"] 
+                        if n["data"]["id"] == node_id
+                    )
+                    if "paper_id" in clicked_node["data"]:
+                        st.session_state["paper_details"] = get_paper_by_id(clicked_node["data"]["paper_id"])
+                        st.rerun()
+        
+        handle_dblclick()
+
+        st_link_analysis(
+            elements,
+            layout='concentric',
+            node_styles=node_styles,
+            edge_styles=edge_styles,
+            events=events,
+            key="link_analysis",
+            height="700px"
+        )
 
     if st.button("返回搜索结果"):
         st.session_state["page_state"] = "search_results"
