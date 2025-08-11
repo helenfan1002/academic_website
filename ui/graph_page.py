@@ -25,5 +25,6 @@ edge_styles = [
     EdgeStyle("QUOTES", caption='label', directed=True),
 ]
 
+layout = {"name":"cose","animate":"end","nodeDimensionIncludeLabels":False}
 st.markdown("##: Example")
-st_link_analysis(elements, "cose", node_styles, edge_styles)
+st_link_analysis(elements, layout, node_styles, edge_styles)
