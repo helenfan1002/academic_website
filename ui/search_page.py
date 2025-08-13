@@ -1,5 +1,5 @@
 import streamlit as st
-from engine.fetcher import fetch_papers, get_simple_references, get_simple_citations
+from engine.fetcher import fetch_papers, get_simple_references, get_simple_citations, get_paper_relations
 from engine.database import Database
 from models.paper import Paper
 from datetime import datetime
@@ -121,37 +121,36 @@ def search_results():
 
 def display_paper_card(paper: Paper, index: int):
     """显示单篇论文卡片（添加收藏功能）"""
-    from engine.database import Database
-
     col1, col2 = st.columns([4, 1])
     with col1:
         st.markdown(f"### {paper.title}")
         st.caption(f"作者：{', '.join(paper.authors)} | 年份：{paper.year} | 引用：{paper.citation_count}")
 
     with col2:
-        with Database() as db:
-            is_favorited = db.paper_exists(paper.paper_id)  
+        db = Database()
+        is_favorited = db.paper_exists(paper.paper_id)  
 
-            if st.button("⭐ 已收藏" if is_favorited else "☆ 收藏", 
-                        key=f"fav_{index}"):
-                try:
-                    if is_favorited:
-                        db.remove_paper(paper.paper_id)
-                        st.toast("已取消收藏")
-                    else:
-                        db.add_paper(paper)
-                        st.toast("已收藏论文")
-                    st.session_state.force_rerun = not getattr(st.session_state, 'force_rerun', False)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"操作失败: {str(e)}")
-
-            if st.button("详情", key=f"detail_{index}"):
-                st.session_state.update({
-                    "paper_details": paper,
-                    "page_state": "paper_details"
-                })
+        if st.button("⭐ 已收藏" if is_favorited else "☆ 收藏", 
+                    key=f"fav_{index}"):
+            try:
+                if is_favorited:
+                    db.remove_paper(paper.paper_id)
+                    st.toast("已取消收藏")
+                else:
+                    db.add_paper(paper)
+                    st.toast("已收藏论文")
+                st.session_state.force_rerun = not getattr(st.session_state, 'force_rerun', False)
                 st.rerun()
+            except Exception as e:
+                st.error(f"操作失败: {str(e)}")
+
+        if st.button("详情", key=f"detail_{index}"):
+            st.session_state.update({
+                "paper_details": paper,
+                "page_state": "paper_details"
+            })
+            st.rerun()
+        db.close()
     with st.expander("摘要", expanded=True):
         st.write(paper.abstract[:100] + "..." if paper.abstract else "暂无摘要")
 
@@ -188,7 +187,7 @@ def display_pagination_controls(total_items: int):
 
 def paper_details():
     """文献详情页"""
-    paper = st.session_state.get("paper_details")
+    paper: Paper = st.session_state.get("paper_details")
     if not paper:
         st.warning("文献信息加载失败")
         st.session_state["page_state"] = "search_results"
@@ -204,15 +203,16 @@ def paper_details():
 
     tab1, tab2, tab3, tab4 = st.tabs(["摘要", "参考文献", "引用文献","引用图谱"])
 
+    references, citations = get_paper_relations(paper.paper_id)
     with tab1:
         st.markdown("### 摘要")
         st.write(paper.abstract or "暂无摘要")
 
     with tab2:
-        references = get_simple_references(paper.paper_id)
-        st.markdown(f"### 参考文献（{len(references)})")
+        # references = get_simple_references(paper.paper_id)
+        st.markdown(f"### 参考文献（{paper.reference_count}）")
         if references:
-            for ref in references[:min(50, len(references))]:
+            for ref in references: #[:min(50, len(references))]:
                 title = ref.title if hasattr(ref, 'title') and ref.title else '无标题'
                 authors = ', '.join(ref.authors) if hasattr(ref, 'authors') and ref.authors else ''
                 st.write(f"- {title} ({authors})")
@@ -221,75 +221,66 @@ def paper_details():
 
     with tab3:
         st.markdown(f"### 被引用（{paper.citation_count})")
-        if paper.citation_count > 0:
-            citations = get_simple_citations(paper.paper_id)
-            if citations:
-                for cite in citations[:min(50, len(citations))]:
-                    st.write(f"- {cite.get('title', '无标题')} ({', '.join(author.get('name', '') for author in cite.get('authors', {}))})")
-            else:
-                st.info("暂无引用文献数据")
+        # citations = get_simple_citations(paper.paper_id)
+        if citations:
+            for cite in citations: #[:min(50, len(citations))]:
+                st.write(f"- {cite.title} ({', '.join(cite.authors)})")
+        else:
+            st.info("暂无引用文献数据")
     
     with tab4:
         st.markdown("## 引用关系图谱")
-    
-        references = get_simple_references(paper.paper_id)
-        citations = get_simple_citations(paper.paper_id)
 
         elements = {
             "nodes": [{
                 "data": {
-                    "id": str(paper.paper_id),
+                    "id": paper.paper_id,
                     "title": paper.title,
                     "authors": ", ".join(paper.authors),
-                    "paper_id": paper.paper_id,
+                    "online_url": paper.url,
+                    "paper_id": paper.paper_id, 
                     "label": "current"
                 }
             }],
             "edges": []
         }
 
-        def get_paper_id(item):
-            if hasattr(item, 'paper_id'):
-                return str(item.paper_id)
-            elif isinstance(item, dict):
-                return str(item.get("paper_id", f"gen_{id(item)}"))
-            return f"gen_{id(item)}"
-
         for ref in references[:10]:
-            ref_id = get_paper_id(ref)
             elements["nodes"].append({
                 "data": {
-                    "id": ref_id,
-                    "title": get_title(ref),
-                    "authors": get_authors(ref),
-                    "paper_id": getattr(ref_data, 'paper_id', ref_data.get("paper_id")), 
+                    "id": ref.paper_id,
+                    "title": ref.title,
+                    "authors": ", ".join(ref.authors),
+                    "online_url": ref.url,
+                    "paper_id": ref.paper_id, 
                     "label": "reference"
                 }
             })
             elements["edges"].append({
                 "data": {
-                    "id": f"edge_{paper.paper_id}_to_{ref_id}",
-                    "source": str(paper.paper_id),
-                    "target": ref_id,
+                    "id": f"edge_{paper.paper_id}_to_{ref.paper_id}",
+                    "source": paper.paper_id,
+                    "target": ref.paper_id,
                     "relation": "cites"
                 }
             })
 
         for cite in citations[:10]:
-            cite_id = get_paper_id(cite)
             elements["nodes"].append({
                 "data": {
-                    "id": cite_id,
-                    "title": get_title(cite),
-                    "authors": get_authors(cite),
+                    "id": cite.paper_id,
+                    "title": cite.title,
+                    "authors": ", ".join(cite.authors),
+                    "online_url": cite.url,
+                    "paper_id": cite.paper_id, 
                     "label": "citation"
                 }
             })
             elements["edges"].append({
                 "data": {
-                    "id": f"edge_{cite_id}_to_{paper.paper_id}",
-                    "source": cite_id,
-                    "target": str(paper.paper_id),
+                    "id": f"edge_{cite.paper_id}_to_{paper.paper_id}",
+                    "source": cite.paper_id,
+                    "target": paper.paper_id,
                     "relation": "cited_by"
                 }
             })
@@ -328,15 +319,23 @@ def paper_details():
             )
         ]
 
+        def get_paper_by_id(paper_id: str) -> Paper:
+            db = Database()
+            return db.get_cache_paper(paper_id)
+
         def handle_dblclick():
             if "link_analysis" in st.session_state:
                 event_data = st.session_state["link_analysis"]
-                if event_data.get("name") == "node_dblclick":
-                    node_id = event_data["data"]["node_id"]
+                # print(event_data)
+                if not event_data:
+                    return
+                if event_data.get("action") == "node_dblclick":
+                    node_id = event_data["data"]["target_id"]
                     clicked_node = next(
                         n for n in elements["nodes"] 
                         if n["data"]["id"] == node_id
                     )
+                    print(clicked_node["data"])
                     if "paper_id" in clicked_node["data"]:
                         st.session_state["paper_details"] = get_paper_by_id(clicked_node["data"]["paper_id"])
                         st.rerun()
@@ -345,12 +344,12 @@ def paper_details():
 
         st_link_analysis(
             elements,
-            layout='concentric',
+            layout={"name":"concentric","animate":"end","nodeDimensionIncludeLabels":False},
             node_styles=node_styles,
             edge_styles=edge_styles,
             events=events,
             key="link_analysis",
-            height="700px"
+            # height="700px"
         )
 
     if st.button("返回搜索结果"):

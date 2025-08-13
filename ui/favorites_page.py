@@ -1,6 +1,6 @@
 import streamlit as st
 from engine.database import Database
-from engine.fetcher import get_simple_references, get_simple_citations
+from engine.fetcher import get_simple_references, get_simple_citations, get_paper_relations
 from models.paper import Paper
 from datetime import datetime
 from typing import List
@@ -21,7 +21,6 @@ def show():
 def show_favorites_list():
     """显示收藏列表"""
     st.header("⭐ 我的收藏")
-    
     db = Database()
     papers = db.get_all_papers()
     db.close()
@@ -96,14 +95,12 @@ def _show_papers_list(papers: List[Paper]):
                 db = Database()
                 if st.button("移除收藏", key=f"remove_{paper.paper_id}"):
                     db.remove_paper(paper.paper_id)
-                    db.close()
                     st.rerun()
                 
                 if st.button("查看详情", key=f"detail_{paper.paper_id}"):
                     st.session_state["paper_details"] = paper
                     st.session_state["page_state"] = "paper_details"
                     st.session_state["previous_page"] = "favorites_list"
-                    db.close()
                     st.rerun()
                 db.close()
 
@@ -125,12 +122,13 @@ def paper_details():
 
     tab1, tab2, tab3 = st.tabs(["摘要", "参考文献", "引用文献"])
 
+    references, citations = get_paper_relations(paper.paper_id)
     with tab1:
         st.markdown("### 摘要")
         st.write(paper.abstract or "暂无摘要")
 
     with tab2:
-        references = get_simple_references(paper.paper_id)
+        # references = get_simple_references(paper.paper_id)
         st.markdown(f"### 参考文献（{len(references)})")
         if references:
             for ref in references[:min(50, len(references))]:
@@ -140,13 +138,12 @@ def paper_details():
 
     with tab3:
         st.markdown(f"### 被引用（{paper.citation_count})")
-        if paper.citation_count > 0:
-            citations = get_simple_citations(paper.paper_id)
-            if citations:
-                for cite in citations[:min(50, len(citations))]:
-                    st.write(f"- {cite.get('title', '无标题')} ({', '.join(author.get('name', '') for author in cite.get('authors', {}))})")
-            else:
-                st.info("暂无引用文献数据")
+        # citations = get_simple_citations(paper.paper_id)
+        if citations:
+            for cite in citations[:min(50, len(citations))]:
+                st.write(f"- {cite.title} ({', '.join(cite.authors)})")
+        else:
+            st.info("暂无引用文献数据")
 
     if st.button("返回收藏列表"):
         st.session_state["page_state"] = "favorites_list"
